@@ -1,5 +1,6 @@
 import { day, merge, outcomes, rememberSpecies, snapshot, validate } from './model.mjs';
 import { speciesChoices } from './species.mjs';
+import qrcode from './vendor/qrcode-generator.mjs';
 import { blank, button, esc, foodLabel, idAttr, option } from './views.mjs';
 
 const input = (label, name, value = '', attrs = '') => `<label>${label}<input name="${name}" value="${esc(value)}" ${attrs}></label>`;
@@ -42,7 +43,8 @@ export function dialogs({ modal, state, exportState, save, uuid, recorded, remov
   function profile(kind, item) {
     const animal = kind === 'animals';
     const groups = [...new Set(['Spinne', 'Reptil', 'Amphibie', 'Andere', ...state().animals.map(entry => entry.group), ...(state().species ?? []).map(entry => entry.group)])];
-    const fields = animal ? `${input('Name', 'name', item?.name, 'required maxlength="100"')}${input('Tiergruppe', 'group', item?.group, 'required list="groups" maxlength="80"')}<datalist id="groups">${groups.map(value => option(value, value)).join('')}</datalist>${speciesFields(item?.species)}${input('Terrarium / Standort', 'location', item?.location, 'maxlength="100"')}<label>Standardvorlage <select name="foodId">${option('', 'Keine', item?.foodId)}${state().foods.filter(food => !food.archived || food.id === item?.foodId).map(food => option(food.id, `${foodLabel(food)}${food.archived ? ' (Archiv)' : ''}`, item?.foodId)).join('')}</select></label><div class="form-row">${input('Erster Futtertermin', 'first', item?.first, 'type="date"')}${input('Intervall (Tage)', 'interval', item?.interval || '', 'type="number" min="1" max="3650"')}</div>${note(item?.note)}` : foodFields(item);
+    const enclosures = state().enclosures.filter(enclosure => !enclosure.archived || enclosure.id === item?.enclosureId);
+    const fields = animal ? `${input('Name', 'name', item?.name, 'required maxlength="100"')}${input('Interne Tier-ID', 'internalId', item?.internalId, 'maxlength="100"')}<div class="form-row"><label>Geschlecht <select name="sex">${['unbekannt', 'männlich', 'weiblich', 'vermutet'].map(value => option(value, value, item?.sex ?? 'unbekannt')).join('')}</select></label><label>Entwicklungsstadium <select name="stage">${['unbekannt', 'Sling', 'Juvenil', 'Subadult', 'Adult'].map(value => option(value, value, item?.stage ?? 'unbekannt')).join('')}</select></label></div><label>Herkunft <select name="origin">${['unbekannt', 'Nachzucht', 'Wildfang'].map(value => option(value, value, item?.origin ?? 'unbekannt')).join('')}</select></label>${input('Tiergruppe', 'group', item?.group, 'required list="groups" maxlength="80"')}<datalist id="groups">${groups.map(value => option(value, value)).join('')}</datalist>${speciesFields(item?.species)}${input('Terrarium / Standort', 'location', item?.location, 'maxlength="100"')}<label>Terrarium zuordnen <select name="enclosureId">${option('', 'Keines', item?.enclosureId)}${enclosures.map(enclosure => option(enclosure.id, `${enclosure.name}${enclosure.location ? ` · ${enclosure.location}` : ''}`, item?.enclosureId)).join('')}</select></label><label>Standardvorlage <select name="foodId">${option('', 'Keine', item?.foodId)}${state().foods.filter(food => !food.archived || food.id === item?.foodId).map(food => option(food.id, `${foodLabel(food)}${food.archived ? ' (Archiv)' : ''}`, item?.foodId)).join('')}</select></label><div class="form-row">${input('Erster Futtertermin', 'first', item?.first, 'type="date"')}${input('Intervall (Tage)', 'interval', item?.interval || '', 'type="number" min="1" max="3650"')}</div>${note(item?.note)}` : foodFields(item);
     open(animal ? (item ? 'Tier bearbeiten' : 'Tier hinzufügen') : (item ? 'Vorlage bearbeiten' : 'Vorlage hinzufügen'), form(fields));
     body.onclick = null;
     const editor = body.querySelector('form');
@@ -51,9 +53,15 @@ export function dialogs({ modal, state, exportState, save, uuid, recorded, remov
       event.preventDefault();
       const get = read(event.currentTarget);
       if (animal && Boolean(get('first')) !== Boolean(get('interval'))) return error('Ersten Termin und Intervall gemeinsam eintragen oder beide leer lassen.');
-      const values = animal ? { name: get('name'), group: get('group'), species: get('species'), location: get('location'), foodId: get('foodId'), first: get('first'), interval: Number(get('interval')), note: get('note') } : readFood(get);
+      const values = animal ? { name: get('name'), internalId: get('internalId'), sex: get('sex'), stage: get('stage'), origin: get('origin'), group: get('group'), species: get('species'), location: get('location'), enclosureId: get('enclosureId'), foodId: get('foodId'), first: get('first'), interval: Number(get('interval')), note: get('note') } : readFood(get);
       const record = { id: item?.id ?? uuid(), archived: item?.archived ?? false, ...values };
-      save(current => ({ ...current, [kind]: upsert(current[kind], record) }), event.submitter, () => manage(kind));
+      save(current => {
+        const updated = { ...current, [kind]: upsert(current[kind], record) };
+        if (animal && record.enclosureId && record.enclosureId !== (item?.enclosureId ?? '')) {
+          updated.enclosureHistory = [...current.enclosureHistory, { id: uuid(), animalId: record.id, from: item?.enclosureId ?? '', to: record.enclosureId, date: day(), note: '' }];
+        }
+        return updated;
+      }, event.submitter, () => manage(kind));
     };
   }
 
@@ -99,7 +107,7 @@ export function dialogs({ modal, state, exportState, save, uuid, recorded, remov
   }
 
   function meal(date, id, existing) {
-    const animals = state().animals.filter(animal => !animal.archived || animal.id === existing?.animalId);
+    const animals = state().animals.filter(animal => (!animal.archived && (!animal.moltStatus || animal.moltStatus === 'normal')) || animal.id === existing?.animalId);
     if (!animals.length) return manage('animals');
     const initial = animals.find(animal => animal.id === id) ?? animals[0];
     const foods = state().foods.filter(food => !food.archived);
@@ -170,5 +178,97 @@ export function dialogs({ modal, state, exportState, save, uuid, recorded, remov
       } catch (failure) { error(`Import abgebrochen. ${failure.message}`); }
     };
   }
-  return { manage, meal, backup, error };
+
+  function manageEnclosures() {
+    const items = state().enclosures;
+    open('Terrarien', button('new-enclosure', '+ Terrarium', 'class="primary"') + (items.length ? items.map(item => `<article class="item"><div><h3>${esc(item.name)}</h3><small>${esc([item.location, item.type, item.archived ? 'Archiviert' : ''].filter(Boolean).join(' · '))}</small></div><div class="actions">${button('edit-enclosure', 'Bearbeiten', idAttr(item.id))}${button('archive-enclosure', item.archived ? 'Reaktivieren' : 'Archivieren', idAttr(item.id))}</div></article>`).join('') : blank('Noch keine Terrarien angelegt.')));
+    body.onclick = event => {
+      const control = event.target.closest('button');
+      if (!control) return;
+      const item = items.find(entry => entry.id === control.dataset.id);
+      if (control.dataset.action === 'new-enclosure' || control.dataset.action === 'edit-enclosure') enclosure(item);
+      if (control.dataset.action === 'archive-enclosure') save(current => ({ ...current, enclosures: current.enclosures.map(entry => entry.id === item.id ? { ...entry, archived: !entry.archived } : entry) }), control, manageEnclosures);
+    };
+  }
+
+  function enclosure(item) {
+    open(item ? 'Terrarium bearbeiten' : 'Terrarium hinzufügen', form(`${input('Bezeichnung', 'name', item?.name, 'required maxlength="100"')}${input('Standort / Raum / Regal / Fach', 'location', item?.location, 'maxlength="150"')}${input('Terrarientyp', 'type', item?.type, 'maxlength="100"')}${input('Substrat und Tiefe', 'substrate', item?.substrate, 'maxlength="150"')}${input('Sicherheitshinweis (optional)', 'safety', item?.safety, 'maxlength="200"')}${note(item?.note)}`));
+    body.querySelector('form').onsubmit = event => {
+      event.preventDefault();
+      const get = read(event.currentTarget);
+      const record = { id: item?.id ?? uuid(), archived: item?.archived ?? false, name: get('name'), location: get('location'), type: get('type'), substrate: get('substrate'), safety: get('safety'), note: get('note') };
+      save(current => ({ ...current, enclosures: upsert(current.enclosures, record) }), event.submitter, manageEnclosures);
+    };
+  }
+
+  function molt(animalId = '') {
+    const animals = state().animals.filter(animal => !animal.archived);
+    const phases = [['premolt_suspected', 'Vorhäutung vermutet'], ['premolt_confirmed', 'Vorhäutung bestätigt'], ['molting', 'Häutung läuft'], ['hardening', 'Frisch gehäutet / Aushärtung']];
+    if (!animals.length) return manage('animals');
+    open('Häutungsstatus dokumentieren', form(`<label>Tier <select name="animalId">${animals.map(animal => option(animal.id, animal.name, animalId || animals[0].id)).join('')}</select></label><div class="form-row">${input('Datum', 'date', day(), 'type="date" required')}<label>Status <select name="status">${phases.map(([key, title]) => option(key, title, 'hardening')).join('')}</select></label></div>${note('')}`));
+    body.querySelector('form').onsubmit = event => {
+      event.preventDefault();
+      const get = read(event.currentTarget);
+      const entry = { id: uuid(), animalId: get('animalId'), date: get('date'), status: get('status'), hardened: false, note: get('note') };
+      save(current => ({ ...current, molts: [...current.molts, entry], animals: current.animals.map(animal => animal.id === entry.animalId ? { ...animal, moltStatus: entry.status, moltReady: false, moltId: entry.status === 'hardening' ? entry.id : '' } : animal) }), event.submitter, () => { modal.close(); });
+    };
+  }
+
+  function confirmHardening(animalId, control) {
+    save(current => {
+      const animal = current.animals.find(entry => entry.id === animalId);
+      const latestHardening = current.molts.filter(entry => entry.animalId === animalId && entry.status === 'hardening' && !entry.hardened).sort((left, right) => right.date.localeCompare(left.date))[0];
+      const moltId = animal?.moltId || latestHardening?.id;
+      return { ...current, animals: current.animals.map(entry => entry.id === animalId ? { ...entry, moltStatus: 'normal', moltReady: true, moltId: '' } : entry), molts: current.molts.map(entry => entry.id === moltId ? { ...entry, hardened: true, hardenedAt: day() } : entry) };
+    }, control, () => {});
+  }
+
+  function task() {
+    const animals = state().animals.filter(animal => !animal.archived);
+    open('Pflegeaufgabe', form(`<label>Aufgabe <select name="title">${['Wasser prüfen / erneuern', 'Substratfeuchtigkeit prüfen', 'Klima messen', 'Futtertier entfernen', 'Terrarium reinigen', 'Gesundheitskontrolle', 'Individuelle Aufgabe'].map(value => option(value, value)).join('')}</select></label><label>Tier (optional) <select name="animalId">${option('', 'Kein bestimmtes Tier')}${animals.map(animal => option(animal.id, animal.name)).join('')}</select></label>${input('Fällig am', 'due', day(), 'type="date" required')}<label>Wiederholung <select name="repeat">${[['none', 'Einmalig'], ['daily', 'Täglich'], ['weekly', 'Wöchentlich'], ['monthly', 'Monatlich'], ['interval', 'Alle X Tage']].map(([key, title]) => option(key, title)).join('')}</select></label><label id="repeat-every" hidden>Alle X Tage<input name="every" type="number" min="1" max="3650" value="1"></label>${input('Notiz', 'note', '', 'maxlength="1000"')}`));
+    const editor = body.querySelector('form');
+    editor.elements.repeat.onchange = event => { body.querySelector('#repeat-every').hidden = event.target.value !== 'interval'; };
+    editor.onsubmit = event => {
+      event.preventDefault();
+      const get = read(editor);
+      const entry = { id: uuid(), title: get('title'), animalId: get('animalId'), due: get('due'), note: get('note'), done: false, completedAt: '', repeat: get('repeat'), every: Number(get('every')), completions: [] };
+      save(current => ({ ...current, tasks: [...current.tasks, entry] }), event.submitter, () => { modal.close(); });
+    };
+  }
+
+  function qrLabel(enclosureId) {
+    const enclosure = state().enclosures.find(item => item.id === enclosureId);
+    if (!enclosure) return error('Terrarium nicht mehr vorhanden.');
+    const residents = state().animals.filter(animal => animal.enclosureId === enclosure.id && !animal.archived);
+    const target = new URL(window.location.href);
+    target.search = '';
+    target.hash = '';
+    target.searchParams.set('terrarium', enclosure.id);
+    const code = qrcode(0, 'M');
+    code.addData(target.toString());
+    code.make();
+    open('QR-Etikett', `<article class="print-label"><div class="label-copy"><p class="eyebrow">FUTTERPLAN · TERRARIUM</p><h2>${esc(enclosure.name)}</h2><p>Terrarium-ID: ${esc(enclosure.id)}</p><p>${esc(enclosure.location)}</p>${residents.map(animal => `<p class="label-animal"><strong>${esc(animal.name)}</strong>${animal.species ? ` · ${esc(animal.species)}` : ''}</p>`).join('')}${enclosure.safety ? `<p class="label-safety">${esc(enclosure.safety)}</p>` : ''}<a href="${esc(target.toString())}">${esc(target.toString())}</a></div><div class="qr-code" aria-label="QR-Code für ${esc(enclosure.name)}">${code.createSvgTag({ cellSize: 5, margin: 4, scalable: true })}</div></article><div class="actions print-actions"><button type="button" data-action="print-qr">Etikett drucken</button></div>`);
+  }
+
+  function journal(kind) {
+    const animals = state().animals.filter(animal => !animal.archived);
+    if (!animals.length) return manage('animals');
+    const animalField = `<label>Tier <select name="animalId">${animals.map(animal => option(animal.id, animal.name)).join('')}</select></label>`;
+    const forms = {
+      observation: `${animalField}${input('Datum', 'date', day(), 'type="date" required')}<label>Kategorie <select name="category">${['Normal aktiv', 'Ungewöhnlich inaktiv', 'Futterverweigerung', 'Auffällige Körperhaltung', 'Auffälligkeiten der Bewegung', 'Verletzung', 'Auffälligkeit nach Häutung', 'Auffälliges Abdomen', 'Dehydrierung vermutet', 'Parasitenverdacht', 'Schimmel im Terrarium', 'Sonstige Beobachtung'].map(value => option(value, value)).join('')}</select></label>${note('')}`,
+      reading: `${animalField}${input('Datum', 'date', day(), 'type="date" required')}<div class="form-row">${input('Temperatur (°C)', 'temperature', '', 'type="number" step="any"')}${input('Luftfeuchte (%)', 'humidity', '', 'type="number" min="0" max="100" step="any"')}</div>${note('')}`,
+      measurement: `${animalField}${input('Datum', 'date', day(), 'type="date" required')}<div class="form-row">${input('Körperlänge (mm)', 'length', '', 'type="number" min="0" step="any"')}${input('Beinspannweite (mm)', 'span', '', 'type="number" min="0" step="any"')}</div>${input('Gewicht (g)', 'weight', '', 'type="number" min="0" step="any"')}${note('')}`,
+    };
+    const titles = { observation: 'Beobachtung erfassen', reading: 'Klimawert erfassen', measurement: 'Wachstumsmessung erfassen' };
+    open(titles[kind], form(forms[kind]));
+    body.querySelector('form').onsubmit = event => {
+      event.preventDefault();
+      const get = read(event.currentTarget);
+      const common = { id: uuid(), animalId: get('animalId'), date: get('date'), note: get('note') };
+      const entry = kind === 'observation' ? { ...common, category: get('category') } : kind === 'reading' ? { ...common, temperature: get('temperature'), humidity: get('humidity') } : { ...common, length: get('length'), span: get('span'), weight: get('weight') };
+      const key = { observation: 'observations', reading: 'readings', measurement: 'measurements' }[kind];
+      save(current => ({ ...current, [key]: [...current[key], entry] }), event.submitter, () => { modal.close(); });
+    };
+  }
+  return { manage, meal, backup, error, manageEnclosures, molt, confirmHardening, task, journal, qrLabel };
 }

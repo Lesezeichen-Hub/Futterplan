@@ -146,3 +146,87 @@ test('bucht, korrigiert, wertet aus und tauscht einen vollständigen Bestand aus
   } finally { await other.close(); }
   expect(errors).toEqual([]);
 });
+
+test('verwaltet Terrarium, Häutungsfreigabe, Aufgaben und Messwerte', async ({ page }) => {
+  await page.addInitScript(() => { window.print = () => { window.__printedQr = true; }; });
+  await page.goto('/');
+  await expect(page.getByText('Keine aktiven Tiere für diese Auswahl.')).toBeVisible();
+  const dialog = page.getByRole('dialog');
+  await page.getByRole('button', { name: 'Terrarien', exact: true }).click();
+  await page.getByRole('button', { name: 'Terrarien verwalten' }).click();
+  await dialog.getByRole('button', { name: '+ Terrarium' }).click();
+  await dialog.getByLabel('Bezeichnung').fill('Regal A-1');
+  await dialog.getByLabel('Standort / Raum / Regal / Fach').fill('Raum 1 · Regal A');
+  await dialog.getByLabel('Sicherheitshinweis (optional)').fill('Deckel sichern');
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog.getByRole('heading', { name: 'Regal A-1' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Schließen' }).click();
+
+  await page.getByRole('button', { name: 'Tiere', exact: true }).click();
+  await dialog.getByRole('button', { name: '+ Tier' }).click();
+  await dialog.getByLabel('Name', { exact: true }).fill('Nori');
+  await dialog.getByLabel('Tiergruppe').fill('Spinne');
+  await dialog.getByLabel('Terrarium zuordnen').selectOption({ label: 'Regal A-1 · Raum 1 · Regal A' });
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await dialog.getByRole('button', { name: 'Schließen' }).click();
+  await page.getByRole('button', { name: 'Terrarien', exact: true }).click();
+  await expect(page.getByText('Bewohner: Nori')).toBeVisible();
+  await expect(page.getByText('Deckel sichern')).toBeVisible();
+  await page.getByRole('button', { name: 'QR-Etikett' }).click();
+  await expect(dialog.locator('.qr-code svg')).toBeVisible();
+  const qrTarget = await dialog.locator('.label-copy a').getAttribute('href');
+  expect(new URL(qrTarget).searchParams.get('terrarium')).toBeTruthy();
+  await dialog.getByRole('button', { name: 'Etikett drucken' }).click();
+  expect(await page.evaluate(() => window.__printedQr)).toBe(true);
+  const scanned = await page.context().newPage();
+  await scanned.goto(qrTarget);
+  await expect(scanned.locator('.qr-target')).toBeVisible();
+  await scanned.close();
+  await dialog.getByRole('button', { name: 'Schließen' }).click();
+
+  await page.getByRole('button', { name: 'Häutungen', exact: true }).click();
+  await page.getByRole('button', { name: '+ Status dokumentieren' }).click();
+  await dialog.getByLabel('Tier').selectOption({ label: 'Nori' });
+  await dialog.getByLabel('Status').selectOption('hardening');
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByText(/Fütterung pausiert/)).toBeVisible();
+  await expect(page.getByText(/Cheliceren\/Fangzähnen/)).toBeVisible();
+  await page.getByRole('button', { name: 'Heute', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Fütterung erfassen' })).toHaveCount(0);
+  await expect(page.getByText(/Fütterung pausiert/)).toBeVisible();
+  await page.getByRole('button', { name: 'Häutungen', exact: true }).click();
+  await page.getByRole('button', { name: 'Aushärtung bestätigt' }).click();
+  await expect(page.getByText('Normalzustand')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Pflege', exact: true }).click();
+  await page.getByRole('button', { name: '+ Aufgabe' }).click();
+  await dialog.getByLabel('Aufgabe').selectOption({ label: 'Wasser prüfen / erneuern' });
+  await dialog.getByLabel('Tier (optional)').selectOption({ label: 'Nori' });
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await page.getByRole('button', { name: 'Erledigt', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Erledigt' })).toBeVisible();
+  await page.getByRole('button', { name: '+ Aufgabe' }).click();
+  await dialog.getByLabel('Aufgabe').selectOption({ label: 'Terrarium reinigen' });
+  await dialog.getByLabel('Wiederholung').selectOption('weekly');
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await page.getByRole('button', { name: 'Erledigt', exact: true }).click();
+  const upcoming = page.locator('.stats-section').filter({ has: page.getByRole('heading', { name: 'Demnächst' }) });
+  await expect(upcoming).toBeVisible();
+  await expect(upcoming.locator('small').filter({ hasText: 'Wöchentlich' })).toBeVisible();
+  await page.getByRole('button', { name: 'Letzten Abschluss zurücknehmen' }).click();
+  await expect(page.getByRole('heading', { name: 'Heute' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Journal', exact: true }).click();
+  await page.getByRole('button', { name: '+ Klimawert' }).click();
+  await dialog.getByLabel('Tier').selectOption({ label: 'Nori' });
+  await dialog.getByLabel('Temperatur (°C)').fill('22');
+  await dialog.getByLabel('Luftfeuchte (%)').fill('60');
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByText('22 °C')).toBeVisible();
+  await page.getByRole('button', { name: '+ Wachstumsmessung' }).click();
+  await dialog.getByLabel('Tier').selectOption({ label: 'Nori' });
+  await dialog.getByLabel('Beinspannweite (mm)').fill('42');
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByText(/Beinspannweite 42 mm/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

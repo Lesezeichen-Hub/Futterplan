@@ -1,4 +1,4 @@
-import { day, shift, shiftMonth, empty, validate, snapshot } from './model.mjs';
+import { day, shift, shiftMonth, empty, validate, snapshot, completeTask, undoTaskCompletion } from './model.mjs';
 import { connect, load, change } from './storage.mjs';
 import { renderView, option } from './views.mjs';
 import { dialogs } from './dialogs.mjs';
@@ -12,7 +12,8 @@ let state = empty();
 let database;
 let busy = false;
 let undo = '';
-const filters = { view: 'today', date: day(), group: '', animalId: '', range: '30', start: shift(day(), -29), end: day(), period: 'week' };
+const terrariumTarget = new URLSearchParams(location.search).get('terrarium') ?? '';
+const filters = { view: terrariumTarget ? 'enclosures' : 'today', terrariumId: terrariumTarget, date: day(), group: '', animalId: '', range: '30', start: shift(day(), -29), end: day(), period: 'week' };
 const uuid = () => crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
 
 function notice(text, error = false) {
@@ -71,7 +72,7 @@ function remove(id, button) {
   });
 }
 
-const ui = dialogs({ modal, state: () => state, exportState: () => load(database), save, uuid, recorded, remove, imported: text => { undo = ''; notice(text); } });
+const ui = dialogs({ modal, state: () => state, exportState: async () => validate(await load(database)), save, uuid, recorded, remove, imported: text => { undo = ''; notice(text); } });
 find('#close').onclick = () => { if (!busy) modal.close(); };
 modal.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
 find('#animals').onclick = () => ui.manage('animals');
@@ -101,7 +102,7 @@ document.addEventListener('click', event => {
   if (action === 'calendar') {
     filters.date = date;
     render();
-    if (date <= day() && state.animals.some(animal => animal.id === id && !animal.archived) && !state.meals.some(meal => meal.animalId === id && meal.date === date)) ui.meal(date, id);
+    if (date <= day() && state.animals.some(animal => animal.id === id && !animal.archived && (!animal.moltStatus || animal.moltStatus === 'normal')) && !state.meals.some(meal => meal.animalId === id && meal.date === date)) ui.meal(date, id);
   }
   if (action === 'add') ui.meal(date, id);
   if (action === 'edit') {
@@ -114,9 +115,28 @@ document.addEventListener('click', event => {
       const animal = current.animals.find(item => item.id === id && !item.archived);
       const template = current.foods.find(item => item.id === animal?.foodId && !item.archived);
       if (!template) throw new Error('Standardvorlage nicht mehr verfügbar.');
+      if (animal.moltStatus && animal.moltStatus !== 'normal') throw new Error('Die Fütterung ist während der dokumentierten Häutungsphase pausiert.');
       return { ...current, meals: [...current.meals, { id: mealId, animalId: id, date: day(), result: 'eaten', food: snapshot(template) }] };
     }, button, () => recorded(mealId));
   }
+  if (action === 'molt') ui.molt(id);
+  if (action === 'confirm-hardening') ui.confirmHardening(id, button);
+  if (action === 'manage-enclosures') ui.manageEnclosures();
+  if (action === 'qr-label') ui.qrLabel(id);
+  if (action === 'print-qr') window.print();
+  if (action === 'clear-terrarium') {
+    filters.terrariumId = '';
+    const url = new URL(location.href);
+    url.searchParams.delete('terrarium');
+    history.replaceState(null, '', url);
+    render();
+  }
+  if (action === 'new-task') ui.task();
+  if (action === 'new-observation') ui.journal('observation');
+  if (action === 'new-reading') ui.journal('reading');
+  if (action === 'new-measurement') ui.journal('measurement');
+  if (action === 'task-toggle') save(current => ({ ...current, tasks: current.tasks.map(task => task.id === id ? completeTask(task) : task) }), button, () => {});
+  if (action === 'task-revert') save(current => ({ ...current, tasks: current.tasks.map(task => task.id === id ? undoTaskCompletion(task) : task) }), button, () => {});
 });
 
 content.onchange = event => {
@@ -134,9 +154,12 @@ content.onchange = event => {
 
 try {
   const connection = await connect();
-  state = validate(await load(connection));
+  const stored = await load(connection);
+  state = validate(stored);
+  if (state !== stored) state = await change(connection, current => validate(current));
   database = connection;
   render();
+  if (terrariumTarget) content.querySelector(`[data-enclosure-id="${CSS.escape(terrariumTarget)}"]`)?.scrollIntoView({ block: 'center' });
 } catch (error) {
   notice(`Futterplan konnte nicht geladen werden. ${error.message}`, true);
   content.innerHTML = '<h2 id="view-title">Speicher nicht verfügbar</h2>';
