@@ -1,15 +1,26 @@
 export const outcomes = { eaten: 'Gefressen', partial: 'Teilweise gefressen', refused: 'Verweigert' };
-export const empty = () => ({ version: 1, animals: [], foods: [], meals: [] });
+export const empty = () => ({ version: 1, animals: [], foods: [], meals: [], species: [] });
 export const snapshot = ({ name, amount, unit, supplement, note }) => ({ name, amount, unit, supplement, note });
+
+export const speciesKey = value => value.trim().replace(/\s+/g, ' ').normalize('NFC').toLocaleLowerCase('de');
+
+export function rememberSpecies(data, group, name) {
+  group = group.trim();
+  name = name.trim();
+  if (!group || !name) return data;
+  const species = data.species ?? [];
+  const id = JSON.stringify([speciesKey(group), speciesKey(name)]);
+  return species.some(item => item.id === id) ? data : { ...data, species: [...species, { id, group, name }] };
+}
 
 export function merge(local, incoming) {
   let added = 0;
   let conflicts = 0;
   const same = (left, right) => Object.is(left, right) || (left && right && typeof left === 'object' && typeof right === 'object' && Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => Object.hasOwn(right, key) && same(left[key], right[key])));
   const data = empty();
-  for (const key of ['animals', 'foods', 'meals']) {
-    const records = new Map(local[key].map(item => [item.id, item]));
-    for (const item of incoming[key]) {
+  for (const key of ['animals', 'foods', 'meals', 'species']) {
+    const records = new Map((local[key] ?? []).map(item => [item.id, item]));
+    for (const item of incoming[key] ?? []) {
       if (!records.has(item.id)) { records.set(item.id, item); added++; }
       else if (!same(records.get(item.id), item)) conflicts++;
     }
@@ -98,5 +109,8 @@ export function validate(data, today = day()) {
   const animalIds = new Set(data.animals.map(item => item.id));
   if (!collection(data.meals, meal => animalIds.has(meal.animalId) && validDay(meal.date) && meal.date <= today
     && Object.hasOwn(outcomes, meal.result) && food(meal.food))) throw new Error('Das Backup enthält ungültige Fütterungen.');
+  if (data.species === undefined) return { ...data, species: [] };
+  if (!collection(data.species, item => required(item.group) && item.group.length <= 80 && required(item.name) && item.name.length <= 100
+    && item.id === JSON.stringify([speciesKey(item.group), speciesKey(item.name)]))) throw new Error('Das Backup enthält ungültige eigene Arten.');
   return data;
 }

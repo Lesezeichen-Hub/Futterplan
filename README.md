@@ -12,11 +12,13 @@ Im Lesezeichen-Hub **Hinzufügen → Lokales Modul** wählen und den Projektordn
 2. Unter **Tiere** ein Profil anlegen und optional eine Standardvorlage und einen frei gewählten Fütterungsrhythmus hinterlegen.
 3. Unter **Heute** die Standardvorlage per Klick als gefressen buchen. Für Verweigerung, Teilannahme oder abweichendes Futter die Fütterung manuell erfassen. Woche und Monat erlauben Nachträge und Korrekturen.
 
+Im Tierformular bietet **Art auswählen** eine nach Gruppen sortierte Spinnenliste, darunter Hauswinkel-, Kreuz-, Spring- und Vogelspinnen. Im Feld **Art** sind Vorschläge und Freitext möglich. Mit **Art zur Auswahl hinzufügen** speicherst du einen eigenen Namen für die eingetragene Tiergruppe, auch ohne das Tierprofil zu speichern. Bereits in Profilen verwendete Arten werden ebenfalls angeboten.
+
 Ein verweigerter Versuch verschiebt die Fälligkeit nicht. In der Statistik zählen vollständige und teilweise Annahmen als angenommen; geplante Termine fließen nicht in die Quote ein. Die App gibt keine Fütterungsempfehlungen.
 
 ## Sicherung und Austausch
 
-**Daten → Komplettexport (JSON)** enthält sämtliche Tiere, Vorlagen und Fütterungen inklusive Archiv und Planungsdaten. Historische Futterdetails bleiben auch bei Änderungen an einer Vorlage erhalten. Das Theme ist eine lokale Darstellungspräferenz.
+**Daten → Komplettexport (JSON)** enthält sämtliche Tiere, Vorlagen und Fütterungen inklusive Archiv und Planungsdaten sowie eigene Arten. Historische Futterdetails bleiben auch bei Änderungen an einer Vorlage erhalten. Das Theme ist eine lokale Darstellungspräferenz.
 
 - **Zusammenführen** ergänzt unbekannte Datensätze anhand ihrer IDs. Wiederholte Importe erzeugen keine Duplikate. Bei abweichenden Datensätzen mit gleicher ID bleibt die lokale Fassung bestehen; der Import zeigt die Zahl der Konflikte. Löschungen werden nicht übertragen. Das ist manueller Austausch, keine automatische bidirektionale Synchronisation.
 - **Alles ersetzen** übernimmt den exportierten Stand exakt, auch wenn dadurch lokale Datensätze wegfallen. Vorher am Ziel einen eigenen Export erstellen.

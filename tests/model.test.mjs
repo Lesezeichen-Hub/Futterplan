@@ -1,10 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregate, empty, merge, month, nextDue, shift, shiftMonth, snapshot, validate, week } from '../model.mjs';
+import { aggregate, empty, merge, month, nextDue, rememberSpecies, shift, shiftMonth, snapshot, validate, week } from '../model.mjs';
 
 const food = { name: 'Heimchen', amount: '2', unit: 'Stück', supplement: '', note: '' };
 const animal = { id: 'tier', name: 'Nori', group: 'Spinne', species: '', location: '', note: '', foodId: '', first: '2024-02-28', interval: 7, archived: false };
 const feeding = (result, id = result) => ({ id, animalId: animal.id, date: '2024-02-29', result, food: snapshot(food) });
+
+test('Eigene Arten überstehen alte Backups und den Austausch ohne Duplikate', () => {
+  const { species, ...legacy } = empty();
+  assert.deepEqual(validate(legacy).species, species);
+  const custom = rememberSpecies(empty(), 'Reptil', 'Test-Art');
+  assert.equal(rememberSpecies(custom, ' reptil ', 'TEST-ART'), custom);
+  const imported = merge(legacy, custom);
+  assert.equal(imported.added, 1);
+  assert.deepEqual(imported.data.species, custom.species);
+  assert.equal(merge(imported.data, custom).added, 0);
+  assert.throws(() => validate({ ...custom, species: [{ ...custom.species[0], group: '' }] }));
+});
 
 test('Zusammenführen ist wiederholbar und verändert lokale Konflikte nicht', () => {
   const local = { ...empty(), animals: [animal], meals: [feeding('eaten')] };

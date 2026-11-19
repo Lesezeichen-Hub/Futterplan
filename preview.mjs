@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 const port = Number(process.env.PORT ?? 18784);
 const assets = new Map([
   ['index.html', 'text/html; charset=utf-8'], ['styles.css', 'text/css; charset=utf-8'], ['mark.svg', 'image/svg+xml'],
-  ...['app', 'storage', 'views', 'dialogs', 'model'].map(name => [`${name}.mjs`, 'text/javascript; charset=utf-8']),
+  ...['app', 'storage', 'views', 'dialogs', 'model', 'species'].map(name => [`${name}.mjs`, 'text/javascript; charset=utf-8']),
 ]);
 createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;

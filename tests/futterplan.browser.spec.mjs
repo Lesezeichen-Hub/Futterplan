@@ -1,6 +1,63 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
+test('bietet Spinnen per Schnellauswahl an und überträgt eigene Arten ohne Tierprofil', async ({ page, browser }) => {
+  await page.goto('/');
+  await expect(page.getByText('Keine aktiven Tiere für diese Auswahl.')).toBeVisible();
+  const dialog = page.getByRole('dialog');
+  const openProfile = async () => {
+    await page.getByRole('button', { name: 'Tiere', exact: true }).click();
+    await dialog.getByRole('button', { name: '+ Tier' }).click();
+  };
+  await openProfile();
+  const picker = dialog.getByLabel('Art auswählen');
+  const species = dialog.getByLabel('Art', { exact: true });
+  const group = dialog.getByLabel('Tiergruppe');
+  await expect(picker.locator('option')).not.toHaveCount(1);
+  const garden = 'Gartenkreuzspinne (Araneus diadematus)';
+  await picker.selectOption(garden);
+  await expect(species).toHaveValue(garden);
+  await expect(group).toHaveValue('Spinne');
+  await picker.selectOption('Große Hauswinkelspinne (Eratigena atrica)');
+  await expect(species).toHaveValue('Große Hauswinkelspinne (Eratigena atrica)');
+  await group.fill('Reptil');
+  await expect(picker).toBeDisabled();
+  await species.fill('Eigene Testart');
+  await dialog.getByRole('button', { name: 'Art zur Auswahl hinzufügen' }).click();
+  await expect(dialog.getByRole('status')).toContainText('Art ist in der Auswahl verfügbar.');
+  await page.reload();
+  await expect(page.getByText('Keine aktiven Tiere für diese Auswahl.')).toBeVisible();
+  await openProfile();
+  await group.fill('Reptil');
+  await picker.selectOption('Eigene Testart');
+  await expect(species).toHaveValue('Eigene Testart');
+  await group.fill('Spinne');
+  await expect(picker.locator('option[value="Eigene Testart"]')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Schließen' }).click();
+  await page.getByRole('button', { name: 'Daten', exact: true }).click();
+  const downloaded = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Komplettexport (JSON)' }).click();
+  const payload = await readFile(await (await downloaded).path());
+  const backup = JSON.parse(payload);
+  expect(backup.animals).toHaveLength(0);
+  expect(backup.species).toMatchObject([{ group: 'Reptil', name: 'Eigene Testart' }]);
+
+  const target = await browser.newPage();
+  try {
+    await target.goto(page.url());
+    await expect(target.getByText('Keine aktiven Tiere für diese Auswahl.')).toBeVisible();
+    const targetDialog = target.getByRole('dialog');
+    await target.getByRole('button', { name: 'Daten', exact: true }).click();
+    await targetDialog.getByLabel('JSON-Datei').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: payload });
+    await expect(target.getByRole('status')).toContainText('1 Datensätze ergänzt');
+    await target.getByRole('button', { name: 'Tiere', exact: true }).click();
+    await targetDialog.getByRole('button', { name: '+ Tier' }).click();
+    await targetDialog.getByLabel('Tiergruppe').fill('Reptil');
+    await targetDialog.getByLabel('Art auswählen').selectOption('Eigene Testart');
+    await expect(targetDialog.getByLabel('Art', { exact: true })).toHaveValue('Eigene Testart');
+  } finally { await target.close(); }
+});
+
 test('bucht, korrigiert, wertet aus und tauscht einen vollständigen Bestand aus', async ({ page, context }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));

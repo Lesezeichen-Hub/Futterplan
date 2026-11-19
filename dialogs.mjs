@@ -1,10 +1,12 @@
-import { day, merge, outcomes, snapshot, validate } from './model.mjs';
+import { day, merge, outcomes, rememberSpecies, snapshot, validate } from './model.mjs';
+import { speciesChoices } from './species.mjs';
 import { blank, button, esc, foodLabel, idAttr, option } from './views.mjs';
 
 const input = (label, name, value = '', attrs = '') => `<label>${label}<input name="${name}" value="${esc(value)}" ${attrs}></label>`;
 const note = value => `<label>Notiz<textarea name="note" rows="2" maxlength="1000">${esc(value)}</textarea></label>`;
 const foodFields = (food = {}) => `${input('Futter', 'name', food.name, 'required maxlength="100"')}<div class="form-row">${input('Menge', 'amount', food.amount, 'type="number" min="0.000001" step="any"')}${input('Einheit / Größe', 'unit', food.unit, 'maxlength="50"')}</div>${input('Supplement', 'supplement', food.supplement, 'maxlength="100"')}${note(food.note)}`;
 const form = (fields, extra = '') => `<form class="fields">${fields}<div class="actions"><button class="primary" type="submit">Speichern</button>${extra}</div></form>`;
+const speciesFields = value => `<label>Art auswählen <select id="species-choice"></select></label>${input('Art', 'species', value, 'list="species-options" maxlength="100"')}<datalist id="species-options"></datalist><div class="actions">${button('remember-species', 'Art zur Auswahl hinzufügen')}</div><small id="species-status" role="status" hidden></small>`;
 const read = target => {
   const data = new FormData(target);
   return name => String(data.get(name) ?? '').trim();
@@ -39,10 +41,13 @@ export function dialogs({ modal, state, exportState, save, uuid, recorded, remov
 
   function profile(kind, item) {
     const animal = kind === 'animals';
-    const fields = animal ? `${input('Name', 'name', item?.name, 'required maxlength="100"')}${input('Tiergruppe', 'group', item?.group, 'required list="groups" maxlength="80"')}<datalist id="groups">${[...new Set(['Spinne', 'Reptil', 'Amphibie', 'Andere', ...state().animals.map(entry => entry.group)])].map(value => option(value, value)).join('')}</datalist>${input('Art', 'species', item?.species, 'maxlength="100"')}${input('Terrarium / Standort', 'location', item?.location, 'maxlength="100"')}<label>Standardvorlage <select name="foodId">${option('', 'Keine', item?.foodId)}${state().foods.filter(food => !food.archived || food.id === item?.foodId).map(food => option(food.id, `${foodLabel(food)}${food.archived ? ' (Archiv)' : ''}`, item?.foodId)).join('')}</select></label><div class="form-row">${input('Erster Futtertermin', 'first', item?.first, 'type="date"')}${input('Intervall (Tage)', 'interval', item?.interval || '', 'type="number" min="1" max="3650"')}</div>${note(item?.note)}` : foodFields(item);
+    const groups = [...new Set(['Spinne', 'Reptil', 'Amphibie', 'Andere', ...state().animals.map(entry => entry.group), ...(state().species ?? []).map(entry => entry.group)])];
+    const fields = animal ? `${input('Name', 'name', item?.name, 'required maxlength="100"')}${input('Tiergruppe', 'group', item?.group, 'required list="groups" maxlength="80"')}<datalist id="groups">${groups.map(value => option(value, value)).join('')}</datalist>${speciesFields(item?.species)}${input('Terrarium / Standort', 'location', item?.location, 'maxlength="100"')}<label>Standardvorlage <select name="foodId">${option('', 'Keine', item?.foodId)}${state().foods.filter(food => !food.archived || food.id === item?.foodId).map(food => option(food.id, `${foodLabel(food)}${food.archived ? ' (Archiv)' : ''}`, item?.foodId)).join('')}</select></label><div class="form-row">${input('Erster Futtertermin', 'first', item?.first, 'type="date"')}${input('Intervall (Tage)', 'interval', item?.interval || '', 'type="number" min="1" max="3650"')}</div>${note(item?.note)}` : foodFields(item);
     open(animal ? (item ? 'Tier bearbeiten' : 'Tier hinzufügen') : (item ? 'Vorlage bearbeiten' : 'Vorlage hinzufügen'), form(fields));
     body.onclick = null;
-    body.querySelector('form').onsubmit = event => {
+    const editor = body.querySelector('form');
+    if (animal) bindSpecies(editor);
+    editor.onsubmit = event => {
       event.preventDefault();
       const get = read(event.currentTarget);
       if (animal && Boolean(get('first')) !== Boolean(get('interval'))) return error('Ersten Termin und Intervall gemeinsam eintragen oder beide leer lassen.');
@@ -50,6 +55,47 @@ export function dialogs({ modal, state, exportState, save, uuid, recorded, remov
       const record = { id: item?.id ?? uuid(), archived: item?.archived ?? false, ...values };
       save(current => ({ ...current, [kind]: upsert(current[kind], record) }), event.submitter, () => manage(kind));
     };
+  }
+
+  function bindSpecies(editor) {
+    const group = editor.elements.namedItem('group');
+    const species = editor.elements.namedItem('species');
+    const choices = editor.querySelector('#species-choice');
+    const status = editor.querySelector('#species-status');
+    const catalogueOnly = { animals: [], species: [] };
+    function refresh() {
+      const currentGroup = group.value.trim();
+      const sections = speciesChoices(currentGroup ? state() : catalogueOnly, currentGroup);
+      const options = names => names.map(name => option(name, name)).join('');
+      choices.innerHTML = option('', sections.length ? 'Bitte auswählen' : 'Keine Vorschläge für diese Tiergruppe') + sections.map(([title, names]) => `<optgroup label="${esc(title)}">${options(names)}</optgroup>`).join('');
+      choices.disabled = !sections.length;
+      editor.querySelector('#species-options').innerHTML = sections.map(([, names]) => options(names)).join('');
+      if ([...choices.options].some(entry => entry.value === species.value)) choices.value = species.value;
+    }
+    group.addEventListener('input', () => { status.hidden = true; refresh(); });
+    species.addEventListener('change', () => {
+      status.hidden = true;
+      if (!group.value.trim() && [...choices.options].some(entry => entry.value && entry.value === species.value)) group.value = 'Spinne';
+      refresh();
+    });
+    choices.addEventListener('change', () => {
+      if (choices.value) {
+        species.value = choices.value;
+        species.dispatchEvent(new Event('change'));
+      }
+    });
+    editor.querySelector('[data-action="remember-species"]').onclick = event => {
+      const groupName = group.value.trim();
+      const name = species.value.trim();
+      if (!groupName || !name) return error('Zum Hinzufügen einer Art bitte Tiergruppe und Art eingeben.');
+      save(current => rememberSpecies(current, groupName, name), event.currentTarget, () => {
+        feedback.hidden = true;
+        refresh();
+        status.textContent = 'Art ist in der Auswahl verfügbar.';
+        status.hidden = false;
+      });
+    };
+    refresh();
   }
 
   function meal(date, id, existing) {
