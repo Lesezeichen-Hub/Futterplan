@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Futterplan</title>
+  <script>try { if (localStorage.getItem('futterplan.theme') === 'spider') document.documentElement.dataset.theme = 'spider'; } catch {}</script>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="shell top-inner">
+      <div class="brand"><h1>Futterplan</h1></div>
+      <div class="actions">
+        <label class="theme-label"><span class="sr-only">Design</span><select id="theme"><option value="standard">Standard</option><option value="spider">Spinne</option></select></label>
+        <button id="settings" type="button">Daten</button>
+      </div>
+    </div>
+  </header>
+  <main class="shell">
+    <nav id="views" aria-label="Ansichten">
+      <button data-view="today" aria-current="page">Heute</button><button data-view="week">Woche</button><button data-view="month">Monat</button><button data-view="stats">Statistik</button>
+    </nav>
+    <div class="toolbar">
+      <label>Tiergruppe <select id="group"><option value="">Alle</option></select></label>
+      <label>Tier <select id="animal"><option value="">Alle</option></select></label>
+      <div class="actions manage"><button id="foods">Futtervorlagen</button><button id="animals">Tiere</button></div>
+    </div>
+    <div id="notice" class="notice" hidden><span id="message" role="status"></span> <button id="undo" hidden>Rückgängig</button></div>
+    <section id="content" aria-labelledby="view-title"><h2 id="view-title">Futterplan wird geladen …</h2></section>
+    <noscript>Futterplan benötigt JavaScript.</noscript>
+  </main>
+  <dialog id="modal" aria-labelledby="dialog-title">
+    <header class="dialog-header"><h2 id="dialog-title"></h2><button id="close" aria-label="Schließen" title="Schließen">×</button></header>
+    <div id="dialog-body"></div><p id="dialog-error" role="alert" hidden></p>
+  </dialog>
+</body>
+</html>

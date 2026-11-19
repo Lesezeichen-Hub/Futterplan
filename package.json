@@ -1,0 +1,11 @@
+{
+  "name": "futterplan",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node preview.mjs",
+    "test": "node --test tests/model.test.mjs",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": { "@playwright/test": "^1.61.0" }
+}
