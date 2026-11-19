@@ -19,9 +19,11 @@ function heading(title, navigation = '') {
 function nav(isWeek) {
   return `<div class="date-nav">${button('prev', '‹', `aria-label="${isWeek ? 'Vorherige Woche' : 'Vorheriger Monat'}"`)}${button('now', 'Heute')}${button('next', '›', `aria-label="${isWeek ? 'Nächste Woche' : 'Nächster Monat'}"`)}</div>`;
 }
+const calendarLegend = `<div class="legend calendar-legend">${keys.map(key => `<span><span class="mark ${key}" aria-hidden="true">${symbols[key]}</span> ${outcomes[key]}</span>`).join('')}<span><span class="mark due" aria-hidden="true">◇</span> Fällig</span></div>`;
+
 function marks(entries, due) {
   const tally = counts(entries);
-  return `<span class="marks">${keys.filter(key => tally[key]).map(key => `<span class="${key}" title="${outcomes[key]}">${symbols[key]}${tally[key]}</span>`).join('')}${due ? `<span class="due" title="Fällig">◇${due}</span>` : ''}</span>`;
+  return `<span class="marks" aria-hidden="true">${keys.filter(key => tally[key]).map(key => `<span class="mark ${key}" title="${outcomes[key]}">${symbols[key]}${tally[key]}</span>`).join('')}${due ? `<span class="mark due" title="Fällig">◇${due}</span>` : ''}</span>`;
 }
 function label(date, entries, due, name) {
   const tally = counts(entries);
@@ -52,17 +54,17 @@ function today(animals, meals, dues, foods) {
 function calendar(date, animals, meals, dues, isWeek) {
   if (isWeek) {
     const days = week(date);
-    return heading(`${brief(days[0])} – ${fmt(days[6], { day: 'numeric', month: 'long', year: 'numeric' })}`, nav(true)) + (animals.length ?
+    return heading(`${brief(days[0])} – ${fmt(days[6], { day: 'numeric', month: 'long', year: 'numeric' })}`, nav(true)) + calendarLegend + (animals.length ?
       `<div class="scroll"><table class="week"><thead><tr><th scope="col">Tier</th>${days.map(value => `<th scope="col" class="${value === day() ? 'current' : ''}">${fmt(value, { weekday: 'short' })} ${brief(value)}</th>`).join('')}</tr></thead><tbody>${animals.map(animal => `<tr><th scope="row">${esc(animal.name)}</th>${days.map(value => {
         const entries = meals.filter(meal => meal.date === value && meal.animalId === animal.id);
         const due = Number(dues[animal.id] === value);
-        return `<td>${button('calendar', entries.length || due ? marks(entries, due) : value <= day() && !animal.archived ? '+' : '·', `data-date="${value}" ${idAttr(animal.id)} class="${value === date ? 'selected' : ''}" aria-label="${label(value, entries, due, animal.name)}"`)}</td>`;
+        return `<td>${button('calendar', entries.length || due ? marks(entries, due) : value <= day() && !animal.archived ? '+' : '·', `data-date="${value}" ${idAttr(animal.id)} class="${value === date ? 'selected' : ''} ${entries.length ? 'has-meals' : ''}" aria-label="${label(value, entries, due, animal.name)}"`)}</td>`;
       }).join('')}</tr>`).join('')}</tbody></table></div>` : blank('Keine Tiere für diese Auswahl.')) + details(date, animals, meals, dues);
   }
-  return heading(fmt(date, { month: 'long', year: 'numeric' }), nav(false)) + `<div class="calendar">${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(value => `<div class="weekday muted">${value}</div>`).join('')}${month(date).map(value => {
+  return heading(fmt(date, { month: 'long', year: 'numeric' }), nav(false)) + calendarLegend + `<div class="calendar">${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(value => `<div class="weekday muted">${value}</div>`).join('')}${month(date).map(value => {
     const entries = meals.filter(meal => meal.date === value);
     const due = Object.values(dues).filter(dueDay => dueDay === value).length;
-    return button('calendar', `<span>${Number(value.slice(-2))}</span>${marks(entries, due)}`, `data-date="${value}" aria-pressed="${value === date}" aria-label="${label(value, entries, due)}" class="${value.slice(0, 7) === date.slice(0, 7) ? '' : 'outside'} ${value === day() ? 'current' : ''}"`);
+    return button('calendar', `<span>${Number(value.slice(-2))}</span>${marks(entries, due)}`, `data-date="${value}" aria-pressed="${value === date}" aria-label="${label(value, entries, due)}" class="${value.slice(0, 7) === date.slice(0, 7) ? '' : 'outside'} ${value === day() ? 'current' : ''} ${entries.length ? 'has-meals' : ''}"`);
   }).join('')}</div>` + details(date, animals, meals, dues);
 }
 

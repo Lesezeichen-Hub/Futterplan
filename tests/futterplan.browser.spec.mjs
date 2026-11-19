@@ -103,6 +103,16 @@ test('bucht, korrigiert, wertet aus und tauscht einen vollständigen Bestand aus
   await dialog.getByLabel('Ergebnis').selectOption('refused');
   await dialog.getByRole('button', { name: 'Speichern' }).click();
   await expect(dialog).not.toBeVisible();
+  const monthCell = page.locator('.calendar button[aria-pressed=true]');
+  const date = await monthCell.getAttribute('data-date');
+  for (const cell of [monthCell, page.locator(`.week button[data-date="${date}"][data-id]`)]) {
+    await expect(cell).toHaveClass(/has-meals/);
+    await expect(cell.locator('.mark.eaten')).toHaveText('✓1');
+    await expect(cell.locator('.mark.refused')).toHaveText('×1');
+    await expect(cell).toHaveAccessibleName(/Gefressen: 1, Verweigert: 1/);
+    await expect(page.locator('.day-detail article')).toHaveCount(2);
+    if (cell === monthCell) await page.getByRole('button', { name: 'Woche', exact: true }).click();
+  }
   await page.getByRole('button', { name: 'Statistik', exact: true }).click();
   await expect(page.locator('.metrics')).toContainText('50');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

@@ -56,13 +56,21 @@ th, td { padding: .45rem; border-bottom: 1px solid var(--line); overflow-wrap: a
 .week { min-width: 45rem; table-layout: fixed; }
 .week th:first-child { width: 20%; }
 .week td button { width: 100%; min-height: 2.8rem; padding: .25rem; }
-.marks { display: flex; gap: .25rem; flex-wrap: wrap; justify-content: center; font-size: .78rem; font-variant-numeric: tabular-nums; }
+.marks { display: flex; gap: .2rem; flex-wrap: wrap; justify-content: center; }
+.mark { display: inline-block; border-radius: 4px; padding: .08rem .22rem; font-size: .85rem; font-weight: 750; line-height: 1.15; font-variant-numeric: tabular-nums; background: var(--badge); color: var(--page); overflow-wrap: anywhere; }
+.mark.eaten { --badge: var(--eaten); }
+.mark.partial { --badge: var(--partial); }
+.mark.refused { --badge: var(--refused); }
+.mark.due { color: var(--due); outline: 1px solid currentColor; outline-offset: -1px; }
+.calendar-legend { font-size: .85rem; }
 .calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; padding: 3px; }
 .weekday { text-align: center; padding-bottom: .35rem; }
 .calendar button { min-height: 4.1rem; padding: .25rem; display: grid; grid-template-rows: 1.25rem 1fr; align-items: start; }
 .calendar button.outside { color: var(--muted); background: transparent; }
+.calendar button.has-meals, .week button.has-meals { background: color-mix(in srgb, var(--accent) 18%, var(--raised)); box-shadow: inset 0 2px var(--accent); }
+.calendar button.has-meals:hover, .week button.has-meals:hover { background: color-mix(in srgb, var(--accent) 27%, var(--raised)); }
 .calendar button[aria-pressed='true'], .week .selected { border-color: var(--accent); }
-.current { text-decoration: underline; text-underline-offset: .18rem; }
+.current:not(button), button.current > :first-child { text-decoration: underline; text-underline-offset: .18rem; }
 .day-detail { margin-top: 1rem; }
 dialog { background: var(--page); color: var(--text); border: 1px solid var(--line); border-radius: 8px; width: min(34rem, 100% - 1.5rem); max-height: 90dvh; padding: 1rem; }
 dialog::backdrop { background: #070a0ac4; }
@@ -89,6 +97,7 @@ form.fields { display: grid; gap: .7rem; }
   .toolbar select { max-width: 9rem; }
   .manage { margin-left: 0; width: 100%; }
   .calendar button { min-height: 3.75rem; padding: .1rem; }
-  .calendar .marks { gap: .1rem .24rem; font-size: .7rem; line-height: 1.15; }
+  .calendar .marks { gap: .12rem; }
+  .calendar .mark { font-size: .75rem; padding-inline: .14rem; }
   .stats-section table { min-width: 27rem; }
 }
